@@ -3,6 +3,7 @@
 # License: GPL v3 Copyright: 2018, Kovid Goyal <kovid at kovidgoyal.net>
 
 import os
+import sys
 
 from kitty.constants import cache_dir
 
@@ -76,16 +77,16 @@ def cmd(command):
     return subprocess.check_output(command).decode("utf-8")
 
 def inp(fname):
-    with open(fname, "r") as f:
+    with open(os.path.expanduser(os.path.expandvars(fname)), "r") as f:
         return f.read()
 
 def rlinput(prompt, prefill=''):
-    readline.set_pre_input_hook(lambda: readline.insert_text(prefill))
+    readline.set_startup_hook(lambda: readline.insert_text(prefill))
     readline.redisplay()
     try:
         return input(prompt)
     finally:
-        readline.set_pre_input_hook()
+        readline.set_startup_hook()
 
 
 def main(args):
@@ -100,9 +101,10 @@ def main(args):
     init_readline(readline)
 
     error = None
-    inp = '"'
+    prompt_text = ""
+    user_inp = '"'
     while True:
-        with alternate_screen(), HistoryCompleter(None):
+        with alternate_screen(), HistoryCompleter('str_input'):
             print(
                 "Insert raw python commands to insert as text\n"
                 "You can use the following shortcuts:\n"
@@ -120,16 +122,26 @@ def main(args):
             if error is not None:
                 print(styled(error, bold=True))
 
+            print(prompt_text)
+            prompt_text = ""
+
             prompt = '> '
             try:
-                inp = rlinput(prompt, prefill=inp)
+                user_inp = rlinput(prompt, prefill=user_inp)
             except (KeyboardInterrupt, EOFError):
                 return ""
+            if user_inp == "?":
+                import traceback
+                if error is not None:
+                    prompt_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+                continue
+
             try:
-                response = eval(inp)
+                response = eval(user_inp)
                 return response
             except Exception as e:
                 error = e
+                exc_type, exc_value, exc_traceback = sys.exc_info()
             
     return response
 
